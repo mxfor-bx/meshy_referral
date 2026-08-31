@@ -1622,7 +1622,6 @@
             100% { opacity: 0; transform: scale(0.3); }
         }
     </style>
-<base target="_blank">
 </head>
 <body>
     <!-- 背景粒子 -->
@@ -2551,11 +2550,28 @@
             ? `meshy_demo_state_${ENTRY_MODE}_leader_v6`
             : `meshy_demo_state_${ENTRY_MODE}`;
         const COUNTDOWN_KEY = `meshy_countdown_end_${ENTRY_MODE}`;
+        const PAGE_HASHES = {
+            'page-landing': 'landing',
+            'page-channel': 'channel',
+            'page-download': 'download',
+            'page-register': 'register',
+            'page-dashboard': 'dashboard',
+            'page-generate': 'generate',
+            'page-subscribe': 'subscribe',
+            'page-referral-program': 'leader',
+            'page-app-share': 'app-share',
+            'page-app-reward': 'app-reward',
+            'page-app-landing': 'app-landing'
+        };
+        const HASH_PAGES = Object.fromEntries(
+            Object.entries(PAGE_HASHES).map(([pageId, hash]) => [hash, pageId])
+        );
         let previewCountdownTimer = null;
         let previewRedirectTimer = null;
         let leaderSopTimer = null;
         let appFlowTimer = null;
         let appFlowTimeout = null;
+        let currentPageId = null;
 
         let state = {
             energy: 0,
@@ -2613,6 +2629,31 @@
             location.reload();
         }
 
+        function getPageIdFromHash() {
+            const hash = window.location.hash.replace(/^#/, '');
+            return HASH_PAGES[hash] || null;
+        }
+
+        function getDefaultPageId() {
+            if (ENTRY_VIEW === 'leader') return 'page-referral-program';
+            if (state.tasks.generated) return 'page-subscribe';
+            if ((state.tasks.registered || state.hasAssisted) && !state.tasks.generated) return 'page-dashboard';
+            return 'page-landing';
+        }
+
+        function syncPageHash(id, replaceHistory = false) {
+            const hash = PAGE_HASHES[id];
+            if (!hash) return;
+            const nextUrl = `${window.location.pathname}${window.location.search}#${hash}`;
+            if (replaceHistory) {
+                window.history.replaceState(null, '', nextUrl);
+                return;
+            }
+            if (window.location.hash !== `#${hash}`) {
+                window.history.pushState(null, '', nextUrl);
+            }
+        }
+
         // ==================== 倒计时 ====================
         function initCountdown() {
             let end = localStorage.getItem(COUNTDOWN_KEY);
@@ -2638,13 +2679,21 @@
         }
 
         // ==================== 页面切换 ====================
-        function showPage(id) {
+        function showPage(id, options = {}) {
+            if (!document.getElementById(id)) return;
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.getElementById(id).classList.add('active');
+            currentPageId = id;
             if (id === 'page-referral-program') startLeaderSop();
             else stopLeaderSop();
             if (!id.startsWith('page-app-')) stopAppFlowJump();
-            window.scrollTo(0, 0);
+            if (id === 'page-register' && options.registerTab) {
+                switchTab(options.registerTab);
+            }
+            if (options.syncHash !== false) {
+                syncPageHash(id, !!options.replaceHistory);
+            }
+            if (options.scroll !== false) window.scrollTo(0, 0);
         }
 
         function goToChannelSelect() {
@@ -2660,9 +2709,9 @@
         function goToRegister(isOld = false) {
             state.preferredChannel = state.preferredChannel || 'web';
             saveState();
-            showPage('page-register');
-            if (isOld || ENTRY_MODE === 'old') switchTab('old');
-            else switchTab('new');
+            showPage('page-register', {
+                registerTab: isOld || ENTRY_MODE === 'old' ? 'old' : 'new'
+            });
         }
 
         function closeToDashboard() {
@@ -3250,17 +3299,41 @@
             createParticles();
             initCountdown();
             loadState();
+            const initialPageId = getPageIdFromHash() || getDefaultPageId();
+            showPage(initialPageId, {
+                replaceHistory: true,
+                syncHash: true,
+                registerTab: ENTRY_MODE === 'old' ? 'old' : 'new'
+            });
+            updateUI();
 
-            if (ENTRY_VIEW === 'leader') {
-                showPage('page-referral-program');
+            window.addEventListener('popstate', function() {
+                const pageId = getPageIdFromHash() || getDefaultPageId();
+                showPage(pageId, {
+                    syncHash: false,
+                    registerTab: ENTRY_MODE === 'old' ? 'old' : 'new'
+                });
                 updateUI();
-            } else if ((state.tasks.registered || state.hasAssisted) && !state.tasks.generated) {
-                showPage('page-dashboard');
-            } else if (state.tasks.generated) {
-                showPage('page-subscribe');
+            });
+
+            window.addEventListener('hashchange', function() {
+                const pageId = getPageIdFromHash() || getDefaultPageId();
+                if (pageId === currentPageId) return;
+                showPage(pageId, {
+                    syncHash: false,
+                    registerTab: ENTRY_MODE === 'old' ? 'old' : 'new'
+                });
                 updateUI();
-            }
+            });
         };
+
+        window.addEventListener('beforeunload', function() {
+            if (previewCountdownTimer || previewRedirectTimer || appFlowTimer || appFlowTimeout || leaderSopTimer) {
+                stopPreviewCountdown();
+                stopAppFlowJump();
+                stopLeaderSop();
+            }
+        });
 
         // 控制台彩蛋：输入 resetMeshy() 重置整个 Demo
         window.resetMeshy = resetState;
