@@ -2635,9 +2635,6 @@
         }
 
         function getDefaultPageId() {
-            if (ENTRY_VIEW === 'leader') return 'page-referral-program';
-            if (state.tasks.generated) return 'page-subscribe';
-            if ((state.tasks.registered || state.hasAssisted) && !state.tasks.generated) return 'page-dashboard';
             return 'page-landing';
         }
 
