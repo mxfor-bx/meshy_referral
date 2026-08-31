@@ -3296,7 +3296,10 @@
             createParticles();
             initCountdown();
             loadState();
-            const initialPageId = getPageIdFromHash() || getDefaultPageId();
+            const hasForcedEntry = ENTRY_VIEW === 'leader';
+            const initialPageId = hasForcedEntry
+                ? (getPageIdFromHash() || 'page-referral-program')
+                : 'page-landing';
             showPage(initialPageId, {
                 replaceHistory: true,
                 syncHash: true,
